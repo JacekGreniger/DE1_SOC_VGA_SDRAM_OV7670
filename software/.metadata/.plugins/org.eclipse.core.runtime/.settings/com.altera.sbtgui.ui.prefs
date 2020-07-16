@@ -1,0 +1,6 @@
+eclipse.preferences.version=1
+newBspWizardPage.defaultLocation=C\:\\de1-soc\\JAC_DE1_SOC_VGA_SDRAM\\software\\vga_bsp
+newBspWizardPage.sopcinfoFile=C\:\\de1-soc\\JAC_DE1_SOC_VGA_SDRAM\\NIOS.sopcinfo
+newSoftwareExampleWizardPage.defaultLocation=C\:\\de1-soc\\JAC_DE1_SOC_VGA_SDRAM\\software\\vga
+newSoftwareExampleWizardPage.sopcinfoFile=C\:\\de1-soc\\JAC_DE1_SOC_VGA_SDRAM\\NIOS.sopcinfo
+newSoftwareExampleWizardPage2.newBspLocation=C\:\\de1-soc\\JAC_DE1_SOC_VGA_SDRAM\\software\\vga_bsp

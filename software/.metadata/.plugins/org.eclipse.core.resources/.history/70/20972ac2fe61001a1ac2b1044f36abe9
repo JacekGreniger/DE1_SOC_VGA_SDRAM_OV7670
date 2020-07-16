@@ -1,0 +1,271 @@
+#include "alt_types.h"
+#include "altera_avalon_pio_regs.h"
+#include "altera_avalon_i2c.h"
+
+#include "sys/alt_irq.h"
+#include "system.h"
+#include <stdio.h>
+#include <unistd.h>
+#include <string.h>
+
+typedef unsigned long uint32_t;
+
+//https://www.intel.com/content/dam/www/programmable/us/en/pdfs/literature/hb/nios2/n2sw_nii52006.pdf
+int int_cnt = 0;
+int context=0;
+volatile int edge_capture;
+void key_ISR( void * context)
+{
+	int_cnt++;
+
+	/* Cast context to edge_capture's type. It is important that this be declared volatile
+	 * to avoid unwanted compiler optimization. */
+	volatile int* edge_capture_ptr = (volatile int*) context;
+
+	/* Read the edge capture register on the button PIO.
+	 * Store value.*/
+	*edge_capture_ptr = IORD_ALTERA_AVALON_PIO_EDGE_CAP(PIO_1_BASE);
+
+	/* Write to the edge capture register to reset it. */
+	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PIO_1_BASE, 0xff);
+
+	/* Read the PIO to delay ISR exit. This is done to prevent a spurious interrupt in systems with high processor -> pio latency and fast interrupts. */
+	IORD_ALTERA_AVALON_PIO_EDGE_CAP(PIO_1_BASE);
+}
+
+void EnablePioInterrupt()
+{
+	/* Recast the edge_capture pointer to match thealt_irq_register() function prototype. */
+	void* edge_capture_ptr = (void*) &edge_capture;
+
+	/* Enable all 4 button interrupts. */
+	IOWR_ALTERA_AVALON_PIO_IRQ_MASK(PIO_1_BASE, 0xf);
+
+	/* Reset the edge capture register. */
+	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PIO_1_BASE, 0xf);
+
+	/* Register the ISR. */
+	alt_ic_isr_register(PIO_1_IRQ_INTERRUPT_CONTROLLER_ID,
+			PIO_1_IRQ,
+			key_ISR,
+			edge_capture_ptr,
+			0x0);
+}
+
+unsigned char ov7670_regs[] = {
+	    0x12,0x04, // COM7,     set RGB color output
+	    0x11,0x80, // CLKRC     internal PLL matches input clock
+	    0x0C,0x00, // COM3,     default settings
+	    0x3E,0x00, // COM14,    no scaling, normal pclock
+	    0x04,0x00, // COM1,     disable CCIR656
+	    0x40,0xd0, //COM15,     RGB565, full output range
+	    0x3a,0x04, //TSLB       set correct output data sequence (magic)
+	    0x14,0x18, //COM9       MAX AGC value x4
+	    0x4F,0xB3, //MTX1       all of these are magical matrix coefficients
+	    0x50,0xB3, //MTX2
+	    0x51,0x00, //MTX3
+	    0x52,0x3d, //MTX4
+	    0x53,0xA7, //MTX5
+	    0x54,0xE4, //MTX6
+	    0x58,0x9E, //MTXS
+	    0x3D,0xC0, //COM13      sets gamma enable, does not preserve reserved bits, may be wrong?
+	    0x17,0x14, //HSTART     start high 8 bits
+	    0x18,0x02, //HSTOP      stop high 8 bits //these kill the odd colored line
+	    0x32,0x80, //HREF       edge offset
+	    0x19,0x03, //VSTART     start high 8 bits
+	    0x1A,0x7B, //VSTOP      stop high 8 bits
+	    0x03,0x0A, //VREF       vsync edge offset
+	    0x0F,0x41, //COM6       reset timings
+	    0x1E,0x00, //MVFP       disable mirror / flip //might have magic value of 03
+	    0x33,0x0B, //CHLF       //magic value from the internet
+	    0x3C,0x78, //COM12      no HREF when VSYNC low
+	    0x69,0x00, //GFIX       fix gain control
+	    0x74,0x00, //REG74      Digital gain control
+	    0xB0,0x84, //RSVD       magic value from the internet *required* for good color
+	    0xB1,0x0c, //ABLC1
+	    0xB2,0x0e, //RSVD       more magic internet values
+	    0xB3,0x80, //THL_ST
+	    //begin mystery scaling numbers
+	    0x70,0x3a,
+	    0x71,0x35,
+	    0x72,0x11,
+	    0x73,0xf0,
+	    0xa2,0x02,
+	    //gamma curve values
+	    0x7a,0x20,
+	    0x7b,0x10,
+	    0x7c,0x1e,
+	    0x7d,0x35,
+	    0x7e,0x5a,
+	    0x7f,0x69,
+	    0x80,0x76,
+	    0x81,0x80,
+	    0x82,0x88,
+	    0x83,0x8f,
+	    0x84,0x96,
+	    0x85,0xa3,
+	    0x86,0xaf,
+	    0x87,0xc4,
+	    0x88,0xd7,
+	    0x89,0xe8,
+	    //AGC and AEC
+	    0x13,0xe0, //COM8, disable AGC / AEC
+	    0x00,0x00, //set gain reg to 0 for AGC
+	    0x10,0x00, //set ARCJ reg to 0
+	    0x0d,0x40, //magic reserved bit for COM4
+	    0x14,0x18, //COM9, 4x gain + magic bit
+	    0xa5,0x05, // BD50MAX
+	    0xab,0x07, //DB60MAX
+	    0x24,0x95, //AGC upper limit
+	    0x25,0x33, //AGC lower limit
+	    0x26,0xe3, //AGC/AEC fast mode op region
+	    0x9f,0x78, //HAECC1
+	    0xa0,0x68, //HAECC2
+	    0xa1,0x03, //magic
+	    0xa6,0xd8, //HAECC3
+	    0xa7,0xd8, //HAECC4
+	    0xa8,0xf0, //HAECC5
+	    0xa9,0x90, //HAECC6
+	    0xaa,0x94, //HAECC7
+	    0x13,0xe5 //COM8, enable AGC / AEC
+};
+
+// source: https://www.intel.com/content/dam/www/programmable/us/en/pdfs/literature/ug/ug_embedded_ip.pdf
+// page 182
+int ov7670_i2c_initialize()
+{
+	ALT_AVALON_I2C_DEV_t *i2c_dev;  //pointer to instance structure
+	alt_u8 txbuffer[0x200];
+	alt_u8 rxbuffer[0x200];
+	int i;
+	ALT_AVALON_I2C_STATUS_CODE status;
+
+	printf("OV7670 initialization\n");
+
+	//get a pointer to the avalon i2c instance
+	i2c_dev = alt_avalon_i2c_open("/dev/i2c_0"); //I2C_0_NAME
+	if (NULL==i2c_dev)
+	{
+		printf("Error: Cannot find /dev/i2c_0\n");
+		return 1;
+	}
+
+	//set the address of the device using
+	alt_avalon_i2c_master_target_set(i2c_dev, 0x21);
+
+#if 1
+	i = 0;
+    txbuffer[i++]=0x12; txbuffer[i++]=0x80; //reset
+	status=alt_avalon_i2c_master_tx(i2c_dev, txbuffer, i, ALT_AVALON_I2C_NO_INTERRUPTS);
+	if (status!=ALT_AVALON_I2C_SUCCESS) {
+		printf("i2c_test reset write fail, ret=%d\n", status);
+		return 1; //FAIL
+	}
+
+    usleep(100000); //100ms delay
+
+    for (i=0; i<sizeof(ov7670_regs); i=i+2) {
+  		status=alt_avalon_i2c_master_tx(i2c_dev, &ov7670_regs[i], 2, ALT_AVALON_I2C_NO_INTERRUPTS);
+  		if (status!=ALT_AVALON_I2C_SUCCESS) {
+  			printf("i2c_test write fail, pos=%d ret=%d\n", i, status);
+  			return 1; //FAIL
+  		}
+  		usleep(10000);
+    }
+
+    printf("OV7670 initialization done\n");
+
+#if 0
+/* Example: If an eeprom requires a 2 byte address to be sent before doing a
+* memory read, the tx buffer would contain the 2 byte address and the txsize
+* would be set to 2.  Then the rxbuffer will recieve the rxsize number of
+* bytes to read from the eeprom as follows:
+*     To Read 0x10 bytes from eeprom at i2c address 0x51 into buffer:
+*         buffer[0]=2;buffer[1]=0; //set eeprom address 0x200
+*         alt_avalon_i2c_master_tx_rx(i2c_ptr,buffer,2,buffer,0x10,0);
+*
+* Notice the tx and rx buffer can be the same buffer if desired.
+*/
+
+	txbuffer[0]=0x00;
+	status=alt_avalon_i2c_master_tx_rx(i2c_dev, txbuffer, 1, rxbuffer, 1, ALT_AVALON_I2C_NO_INTERRUPTS);
+	if (status!=ALT_AVALON_I2C_SUCCESS) {
+		printf("i2c_test fail3, ret=%d\n", status);
+		return 1; //FAIL
+	}
+	else
+	{
+		printf("reg=0x%02x, val=0x%02x\n", txbuffer[0], rxbuffer[0]);
+	}
+#endif
+
+#else
+	//read back the data into rxbuffer
+	//This command sends the 2 byte eeprom data address required by the eeprom
+	//Then does a restart and receives the data.
+	status=alt_avalon_i2c_master_tx_rx(i2c_dev, txbuffer, 2, rxbuffer, 0x10, ALT_AVALON_I2C_NO_INTERRUPTS);
+	if (status!=ALT_AVALON_I2C_SUCCESS) {
+		printf("i2c_test fail2\n");
+		return 1; //FAIL
+	}
+
+	status = alt_avalon_i2c_send_address(i2c_dev, const alt_u32 rw_bit,c onst alt_u8 issue_restart);
+
+	status = alt_avalon_i2c_cmd_write(i2c_dev,
+	                                                      alt_u8 val,
+	                                                      alt_u8 issue_restart,
+	                                                      alt_u8 issue_stop);
+#endif
+
+	printf("i2c_test() done\n");
+	return 0;
+}
+
+void memset32(uint32_t *p, uint32_t val, uint32_t size)
+{
+	while(size--)
+	{
+		*p++ = val;
+	}
+}
+
+
+void main()
+{
+  printf("Hello from Nios II! DE1_SOC board\n");
+  printf("SDRAM start=0x%08x, size=0x%08x\n", NEW_SDRAM_CONTROLLER_0_BASE, NEW_SDRAM_CONTROLLER_0_SPAN);
+
+#if 1
+  memset32(640*0*2, 0x001F001F, 640*30/2);
+  memset32(640*120*2, 0x07E007E0, 640*30/2);
+  memset32(640*240*2, 0xFFFFFFFF, 640*30/2);
+  memset32(640*450*2, 0xF800F800, 640*30/2);
+
+  EnablePioInterrupt();
+
+#else
+  ov7670_i2c_initialize();
+  printf("wait 2 sec\n");
+  usleep(2000000);
+  IOWR_ALTERA_AVALON_PIO_DATA(PIO_0_BASE, 1);
+  printf("FLAG DONE ASSERTED\n");
+  while(1);
+#endif
+
+
+  int cnt = 0;
+  while(1) {
+	  static int port_val_prev = -1;
+	  int port_val = IORD_ALTERA_AVALON_PIO_DATA(PIO_1_BASE);
+
+	  if (port_val != port_val_prev) {
+		  printf("%d int_cnt=%d 0x%02x\n", cnt++, int_cnt, port_val);
+	  	  uint32_t color = ((port_val>>4)&0x0F)<<1;
+	  	  color |= color<<16;
+
+	  	  memset32(640*120*2, color, 640*30/2);
+	  	  //usleep(500000);
+	  	  port_val_prev = port_val;
+	  }
+  }
+}

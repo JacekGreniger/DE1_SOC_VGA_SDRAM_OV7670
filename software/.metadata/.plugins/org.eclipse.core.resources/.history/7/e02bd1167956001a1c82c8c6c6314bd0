@@ -1,0 +1,86 @@
+/*
+ * "Hello World" example.
+ *
+ * This example prints 'Hello from Nios II' to the STDOUT stream. It runs on
+ * the Nios II 'standard', 'full_featured', 'fast', and 'low_cost' example
+ * designs. It runs with or without the MicroC/OS-II RTOS and requires a STDOUT
+ * device in your system's hardware.
+ * The memory footprint of this hosted application is ~69 kbytes by default
+ * using the standard reference design.
+ *
+ * For a reduced footprint version of this template, and an explanation of how
+ * to reduce the memory footprint for a given application, see the
+ * "small_hello_world" template.
+ *
+ */
+
+#include <stdio.h>
+#include <string.h>
+#include <system.h>
+#include <altera_avalon_pio_regs.h>
+#include <unistd.h>
+#include "sys/alt_irq.h"
+#include "alt_types.h"
+
+
+//https://www.intel.com/content/dam/www/programmable/us/en/pdfs/literature/hb/nios2/n2sw_nii52006.pdf
+int int_cnt = 0;
+void key_ISR( void * context)
+{
+	int_cnt++;
+
+	/* Cast context to edge_capture's type. It is important that this be declared volatile
+	 * to avoid unwanted compiler optimization. */
+	volatile int* edge_capture_ptr = (volatile int*) context;
+
+	/* Read the edge capture register on the button PIO.
+	 * Store value.*/
+	*edge_capture_ptr = IORD_ALTERA_AVALON_PIO_EDGE_CAP(PIO_1_BASE);
+
+	/* Write to the edge capture register to reset it. */
+	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PIO_1_BASE, 0);
+
+	/* Read the PIO to delay ISR exit. This is done to prevent a spurious interrupt in systems with high processor -> pio latency and fast interrupts. */
+	IORD_ALTERA_AVALON_PIO_EDGE_CAP(PIO_1_BASE);
+}
+
+int context=0;
+volatile int edge_capture;
+
+void main()
+{
+  printf("Hello from Nios II! --\n");
+  printf("SDRAM start=0x%08x, size=0x%08x\n", NEW_SDRAM_CONTROLLER_0_BASE, NEW_SDRAM_CONTROLLER_0_SPAN);
+  memset(640*0*2, 0x01, 640*30*2);
+  memset(640*240*2, 0x07, 640*30*2);
+  memset(640*450*2, 0x04, 640*30*2);
+
+
+  /* Recast the edge_capture pointer to match thealt_irq_register() function prototype. */
+  void* edge_capture_ptr = (void*) &edge_capture;
+
+  /* Enable all 4 button interrupts. */
+  IOWR_ALTERA_AVALON_PIO_IRQ_MASK(PIO_1_BASE, 0xf);
+
+  /* Reset the edge capture register. */
+  IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PIO_1_BASE, 0x0);
+
+  /* Register the ISR. */
+  alt_ic_isr_register(PIO_1_IRQ_INTERRUPT_CONTROLLER_ID,
+		  	  	  	  PIO_1_IRQ,
+					  key_ISR,
+					  edge_capture_ptr,
+					  0x0);
+
+  printf("done\n");
+
+  int cnt = 0
+  while(1) {
+	  printf("%d int_cnt=%d\n", cnt++, int_cnt);
+	  usleep(500000);
+//	  int reg = IORD_ALTERA_AVALON_PIO_DATA(PIO_1_BASE);
+//	  unsigned int wr_reg = NEW_SDRAM_CONTROLLER_0_BASE | (reg&1<<31);
+//	  IOWR_ALTERA_AVALON_PIO_DATA(PIO_0_BASE, wr_reg);
+  }
+
+}

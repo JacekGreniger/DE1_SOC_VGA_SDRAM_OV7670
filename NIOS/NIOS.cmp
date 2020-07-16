@@ -1,0 +1,32 @@
+	component NIOS is
+		port (
+			avalon_mm_1_waitrequest       : out   std_logic;                                        -- waitrequest
+			avalon_mm_1_readdata          : out   std_logic_vector(15 downto 0);                    -- readdata
+			avalon_mm_1_readdatavalid     : out   std_logic;                                        -- readdatavalid
+			avalon_mm_1_burstcount        : in    std_logic_vector(0 downto 0)  := (others => 'X'); -- burstcount
+			avalon_mm_1_writedata         : in    std_logic_vector(15 downto 0) := (others => 'X'); -- writedata
+			avalon_mm_1_address           : in    std_logic_vector(31 downto 0) := (others => 'X'); -- address
+			avalon_mm_1_write             : in    std_logic                     := 'X';             -- write
+			avalon_mm_1_read              : in    std_logic                     := 'X';             -- read
+			avalon_mm_1_byteenable        : in    std_logic_vector(1 downto 0)  := (others => 'X'); -- byteenable
+			avalon_mm_1_debugaccess       : in    std_logic                     := 'X';             -- debugaccess
+			clk_clk                       : in    std_logic                     := 'X';             -- clk
+			i2c_0_serial_sda_in           : in    std_logic                     := 'X';             -- sda_in
+			i2c_0_serial_scl_in           : in    std_logic                     := 'X';             -- scl_in
+			i2c_0_serial_sda_oe           : out   std_logic;                                        -- sda_oe
+			i2c_0_serial_scl_oe           : out   std_logic;                                        -- scl_oe
+			pio_0_ext_out_export          : out   std_logic_vector(31 downto 0);                    -- export
+			pio_1_ext_in_export           : in    std_logic_vector(7 downto 0)  := (others => 'X'); -- export
+			reset_reset_n                 : in    std_logic                     := 'X';             -- reset_n
+			sdram_controller_0_wire_addr  : out   std_logic_vector(12 downto 0);                    -- addr
+			sdram_controller_0_wire_ba    : out   std_logic_vector(1 downto 0);                     -- ba
+			sdram_controller_0_wire_cas_n : out   std_logic;                                        -- cas_n
+			sdram_controller_0_wire_cke   : out   std_logic;                                        -- cke
+			sdram_controller_0_wire_cs_n  : out   std_logic;                                        -- cs_n
+			sdram_controller_0_wire_dq    : inout std_logic_vector(15 downto 0) := (others => 'X'); -- dq
+			sdram_controller_0_wire_dqm   : out   std_logic_vector(1 downto 0);                     -- dqm
+			sdram_controller_0_wire_ras_n : out   std_logic;                                        -- ras_n
+			sdram_controller_0_wire_we_n  : out   std_logic                                         -- we_n
+		);
+	end component NIOS;
+
