@@ -6,3 +6,5 @@ OV7670 (INPUT) -> cam_fifo -> AVALON_MM -> SDRAM (frame buffer) -> AVALON_MM -> 
 
 HW: DE1 SOC board and OV7670 camera
 SW: Quartus Lite 18.1 (QSYS and Eclipse)
+
+![alt text](https://github.com/JacekGreniger/DE1_SOC_VGA_SDRAM_OV7670/blob/master/its_working.jpg)
